@@ -1,106 +1,134 @@
-#include "Unit.h"
-#include "Config.h"
-#include <vector>
-#include <raymath.h>
-#include <rlgl.h>
+#include "GameSystems.h"
+#include <iostream>
+#include <algorithm>
 
-void addBox(std::vector<Box>& list, Vector2 startPos, Color color);
-void removeBox(std::vector<Box>& list);
+//void addBox(std::vector<Entity>& list, Vector2 startPos, Color color);
+void removeBox(std::vector<Entity>& list);
+void InitGameVariables(Box& ground, Box& grass, Box& playerTower, Box& enemyTower);
 
 int main(void) {
 	//GAME VARIABLES
-	Vector2 g_size = { WORLD_WIDTH, 120.0f };
-	Vector2 groundPos = { 0.0f, WORLD_HEIGHT - g_size.y - 20.0f};
-	Vector2 grass_size = { WORLD_WIDTH, 40.0f };
-	Vector2 grassPos = { 0.0f, WORLD_HEIGHT - g_size.y - 40.f };
-	std::vector<Box> Entities; 
+	RenderSystem render; 
+	MovementSystem updater; 
+	EnemySpawner spawner; 
+	MoneySystem money; 
+	CombatSystem combat; 
+	TestingFunctions testingFunctions; 
+	TargetSystem targeting;
+	ProjectileSystem projectiles;
 
-	// UI
-	Vector2 ui_size = { 100.0f, 100.0f };
-	Vector2 ui_pos = { SCREEN_WIDTH / 2, SCREEN_HEIGHT - ui_size.y - 20.0f };
-	
-	// TOWER
-	Vector2 t_size = { 100, 250 };
-	Vector2 playerTos = { 75, SCREEN_HEIGHT - t_size.y - 120.0f };
-	Vector2 enemyTPos = {WORLD_WIDTH - t_size.x - 75, SCREEN_HEIGHT - t_size.y - 120.0f};
+	Box ground, grass, playerTower, enemyTower;
+	int playerMoney = 0;
+	int index = 0;
+	State playerState = WALKING;
+	Vector2 PlayerPos = { 0, 0 };
+	Vector2 EnemyPos = { 0, 0 };
+	float playerTime = 0.0f;
+	int eHp = 0;
+	//int enemyMoney = 0; for now
 
-	// 2D Camera
+	// 2D Camera Variables
 	Camera2D camera = { 0 };
 	camera.zoom = 1.0f;
 	camera.target = { 0.0f, -30.0f };
 	int minOffset = 0;
 	int maxOffset = WORLD_WIDTH - SCREEN_WIDTH;
 
-	// Attack Box
-	Vector2 boxSize = { 100.0f, 100.0f };
-
-	// UI
-	Box p_attack(ui_size, Vector2{ ui_pos.x - 150.0f, ui_pos.y }, WHITE);
-	Box p_fly(ui_size, ui_pos, WHITE);
-
+	// Initializing Variables
 	InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Tower Defense Game");
-	Box Ground(g_size, groundPos, DARKBROWN);
-	Box Grass(grass_size, grassPos, GREEN);
-	Box PlayerTower(t_size, playerTos, BLUE);
-	Box EnemyTower(t_size, enemyTPos, RED);
-	
+	InitGameVariables(ground, grass, playerTower, enemyTower);
 	SetTargetFPS(30);
 
+	// Render Variables
+	std::vector<Box> sceneObjects = { ground, grass, playerTower, enemyTower };
+	std::vector<Entity> enemy;
+	std::vector<Entity> player;
+	std::vector<Entity> flying;
+	std::vector<Projectile> projectileUnit;
+	
+	// Game Loop
 	while (!WindowShouldClose()) {
-		Vector2 MousePos = GetMousePosition();
-
-		// This moves the camera 
-		if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {			
+		double dt = GetFrameTime();
+		if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
 			Vector2 mouseDelta = GetMouseDelta();
-			int dx = mouseDelta.x * ( - 1 / camera.zoom);
-			camera.target.x += dx; 
+			float dx = mouseDelta.x * (-1 / camera.zoom);
+			camera.target.x += dx;
 		}
-		camera.target.x = Clamp(camera.target.x, minOffset, maxOffset);
+		camera.target.x = std::clamp(camera.target.x, (float)minOffset, (float)maxOffset);
 
-		// UI 
-		if (p_attack.checkCollisions(MousePos)) {
-			if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) 
-				addBox(Entities, Vector2{ playerTos.x + 100.0f, playerTos.y }, DARKGREEN);
+		// update MONEY
+		money.updateMoney(dt);
+
+		//------------------------------------------------------
+
+		if (IsKeyPressed(KEY_F)) {
+			testingFunctions.createPlayer(player);
+		} 
+		if (IsKeyPressed(KEY_J)) {
+			testingFunctions.createEnemy(enemy);
 		}
-		else if (p_fly.checkCollisions(MousePos)) {
-			if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
-			addBox(Entities, Vector2{ playerTos.x + 100.0f, playerTos.y - 400.0f }, YELLOW);
+		if (IsKeyPressed(KEY_K)) {
+			testingFunctions.createFlyEnemy(player);
+		}
+		
+		// -----------------------------------------------------
+		for (auto& p : player) {
+			p.currentTargetIndex = targeting.getClosestEnemyIndex(p, enemy);
+			//health.checkDead(unit);
+			combat.processCombat(p, enemy, projectileUnit, dt);
 		}
 
-		removeBox(Entities);
-		// Drawing
+		for (auto& e : enemy) {
+			e.currentTargetIndex = targeting.getClosestEnemyIndex(e, player);
+			//health.checkDead(e);
+			combat.processCombat(e, player, projectileUnit, dt);
+		}
+
+		//------------------------------------------------------
+		
+		removeBox(player);
+		removeBox(enemy);
+		projectiles.removeProjectiles(projectileUnit);
+	
+		//------------------------------------------------------
+
+		updater.updatePosition(enemy, dt);
+		updater.updatePosition(player, dt);
+		if (!projectileUnit.empty()) {
+			projectiles.processBombs(projectileUnit, enemy, dt);
+		}
+
+		//------------------------------------------------------
+		
 		BeginDrawing();
 			ClearBackground(RAYWHITE);
-			// 2d Drawing
 			BeginMode2D(camera);
-				PlayerTower.draw();
-				EnemyTower.draw();
-				Grass.draw();
-				Ground.draw();
 
-				for (int i = 0; i < Entities.size(); ++i) {
-					Entities[i].draw();
-				}
+			render.drawBaseGame(sceneObjects);
+			render.drawEntities(enemy);
+			render.drawEntities(player);
+			render.drawProjectiles(projectileUnit);
+		
 			EndMode2D();
-			// 1d Drawing
-			p_attack.draw();
-			p_fly.draw();
-			// Text
-			//DrawText("The window is loaded!", 100, 50, 20, LIGHTGRAY);
-			DrawText(TextFormat("Camera current position %f%f", camera.target.x, camera.target.y), 200, 60, 20, BLUE);
+
+			DrawText(TextFormat("current index %d", index), 100, 100, 1, BLACK);
 		EndDrawing();
 	}
 	return 0;
 }
 
-void addBox(std::vector<Box>& list, Vector2 startPos, Color color){
-	list.emplace_back(Vector2{ 100.0f, 100.0f }, startPos, color);
-}
-
-void removeBox(std::vector<Box>& list) {
+void removeBox(std::vector<Entity>& list) {
 	list.erase(
 		std::remove_if(list.begin(), list.end(),
-			[](const Box& b) { return !b.alive; }),
+			[](const Entity& b) { return b.state == DEAD; }),
 		list.end()
 	);
+}
+
+void InitGameVariables(Box& ground, Box& grass, Box& playerTower, Box& enemyTower) {
+	// x, y, width, height
+	ground = { Rectangle{0.0f, GROUND_POSITION_Y, GROUND_WIDTH, GROUND_HEIGHT}, BROWN, 0 };
+	grass = { Rectangle{0.0f, GROUND_POSITION_Y, GROUND_WIDTH, 20.0f}, GREEN, 0 };
+	playerTower = { Rectangle{75, GROUND_POSITION_Y - 250.0f, 100, 250, }, YELLOW, 0 };
+	enemyTower = { Rectangle{WORLD_WIDTH - 175, GROUND_POSITION_Y - 250.0f, 100, 250, }, RED, 0 };
 }

@@ -1,29 +1,72 @@
 #pragma once
+
 #include <raylib.h>
 #include <cstdint>
 
-class Box {
-private:
-	Vector2 m_size;
-	Vector2 m_position;
-	Rectangle rect = { m_size.x, m_size.y, m_position.x, m_position.y };
-	Color m_color;
-	int m_hp; 
-
-public:
-	bool alive = false;
-	Box(Vector2 size, Vector2 position, Color color) :
-		m_size(size), m_position(position), m_color(color), alive(true){};
-
-	void draw() const {
-		DrawRectangle(m_position.x, m_position.y, m_size.x, m_size.y, m_color); 
-	}
-
-	void updatePos(int x, int y, float dt){
-		m_position.x += x * dt;
-		m_position.y += y * dt; 
-	}
-	bool checkCollisions(Vector2 object_pos) const {
-		return CheckCollisionPointRec(object_pos, rect);
-	}
+enum Team{
+	PLAYER,
+	ENEMY
 };
+
+enum ProjectileType {
+	BOMB,
+	ARROW
+};
+
+enum CombatType {
+	GROUND = 0, 
+	RANGE = 1,
+	FLYING = 2, 
+	GIANT = 3,
+	HEALER = 4
+};
+
+enum State {
+	WALKING,
+	ATTACK,
+	DEAD,
+	DEFAULT
+};
+
+// ---Entities---
+struct Entity {
+	// Identity
+	Team team; 
+	CombatType attackType;
+
+	// Transform
+	Rectangle shape; 
+	Color color;
+
+	// Stats
+	float hp;
+	float Maxhp;
+	float attackDamage;
+
+	// Runtime Combat
+	float attackCooldown;
+	float attackTimer;
+	float attackRange;
+	int currentTargetIndex;
+	State state;
+};
+// ---Entities---
+struct Projectile {
+	Team team; 
+	ProjectileType projectileType;
+
+	Rectangle shape;
+	Color color;
+
+	float blastRadius;
+	float attackDamage;
+	int currentTargetIndex;
+	State state; // WALKING means falling
+};
+// ---Box---
+struct Box {
+	Rectangle shape;
+	Color color;
+	int id;  // 0: non-interactable, 1: interactable
+};
+
